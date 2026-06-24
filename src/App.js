@@ -24,7 +24,7 @@ import "./App.css";
 // COMPONENT CON: HIỂN THỊ VÀ XỬ LÝ TỪNG ẢNH
 // ==========================================
 const SortableImageItem = memo(
-  ({ img, index, removeImage, sharpenImage, resetToOriginal, handleAutoCrop, rotateImageReal }) => {
+  ({ img, index, removeImage, resetToOriginal, handleAutoCrop, rotateImageReal }) => {
     const {
       attributes,
       listeners,
@@ -111,7 +111,6 @@ const SortableImageItem = memo(
             </button>
           </div>
 
-          {img.isSharpened && <span className="status-badge">Đã nét</span>}
           {img.isCropped && <span className="status-badge crop-badge">Đã cắt</span>}
         </div>
 
@@ -128,13 +127,6 @@ const SortableImageItem = memo(
               title="Xoay thực tế ảnh 90 độ"
             >
               🔄 Xoay 90°
-            </button>
-            <button
-              className="btn-action-tile"
-              onClick={() => sharpenImage(img.id, img.url)}
-              disabled={img.isSharpened}
-            >
-              ✨ {img.isSharpened ? "Đã nét" : "Làm nét"}
             </button>
             <button
               className="btn-action-tile btn-reset-tile"
@@ -154,7 +146,6 @@ const SortableImageItem = memo(
       prevProps.img.id === nextProps.img.id &&
       prevProps.img.url === nextProps.img.url &&
       prevProps.img.rotation === nextProps.img.rotation &&
-      prevProps.img.isSharpened === nextProps.img.isSharpened &&
       prevProps.img.isCropped === nextProps.img.isCropped
     );
   }
@@ -187,7 +178,6 @@ function App() {
         originalUrl: blobUrl,
         name: file.name,
         size: (file.size / 1024).toFixed(1) + " KB",
-        isSharpened: false,
         isCropped: false,
         rotation: 0,
       };
@@ -311,77 +301,12 @@ function App() {
     );
   };
 
-  const sharpenImage = (id, currentUrl) => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      const img = new Image();
-      img.src = currentUrl;
-      img.onload = () => {
-        const MAX_WIDTH = 1500;
-        let w = img.width;
-        let h = img.height;
-        if (w > MAX_WIDTH) {
-          h = (MAX_WIDTH * h) / w;
-          w = MAX_WIDTH;
-        }
-
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        canvas.width = w;
-        canvas.height = h;
-        ctx.drawImage(img, 0, 0, w, h);
-
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-        const output = ctx.createImageData(w, h);
-        const outputData = output.data;
-        const k = [0, -1, 0, -1, 5, -1, 0, -1, 0];
-
-        for (let y = 1; y < h - 1; y++) {
-          for (let x = 1; x < w - 1; x++) {
-            for (let c = 0; c < 3; c++) {
-              let i = (y * w + x) * 4 + c;
-              let val = 0;
-              for (let cy = 0; cy < 3; cy++) {
-                for (let cx = 0; cx < 3; cx++) {
-                  let pIdx = ((y + cy - 1) * w + (x + cx - 1)) * 4 + c;
-                  val += data[pIdx] * k[cy * 3 + cx];
-                }
-              }
-              outputData[i] = Math.min(255, Math.max(0, val));
-            }
-            outputData[(y * w + x) * 4 + 3] = data[(y * w + x) * 4 + 3];
-          }
-        }
-        ctx.putImageData(output, 0, 0);
-
-        canvas.toBlob(
-          (blob) => {
-            const target = images.find(item => item.id === id);
-            if (target && target.url !== target.originalUrl) {
-              URL.revokeObjectURL(target.url);
-            }
-            const sharpenedUrl = URL.createObjectURL(blob);
-            setImages((prev) =>
-              prev.map((item) =>
-                item.id === id ? { ...item, url: sharpenedUrl, isSharpened: true } : item
-              )
-            );
-            setIsProcessing(false);
-          },
-          "image/jpeg",
-          0.95
-        );
-      };
-    }, 100);
-  };
-
   const resetToOriginal = (id) => {
     setImages((prev) =>
       prev.map((item) => {
         if (item.id === id) {
           if (item.url !== item.originalUrl) URL.revokeObjectURL(item.url);
-          return { ...item, url: item.originalUrl, isSharpened: false, isCropped: false, rotation: 0 };
+          return { ...item, url: item.originalUrl, isCropped: false, rotation: 0 };
         }
         return item;
       })
@@ -414,7 +339,6 @@ function App() {
   const exportToPDF = async () => {
     if (images.length === 0) return;
 
-    // Khởi tạo một đối tượng jsPDF mặc định ban đầu
     const pdf = new jsPDF({
       orientation: "p",
       unit: "mm",
@@ -424,7 +348,6 @@ function App() {
     for (let index = 0; index < images.length; index++) {
       const imgItem = images[index];
 
-      // Đọc ảnh để lấy dữ liệu base64 cùng kích thước thực tế sau khi cắt/xoay
       const imgDataObj = await new Promise((resolve) => {
         const tempImg = new Image();
         tempImg.src = imgItem.url;
@@ -443,27 +366,20 @@ function App() {
         };
       });
 
-      // Tự động xác định hướng trang dựa trên tỷ lệ ảnh thực tế
       const pageOrientation = imgDataObj.w > imgDataObj.h ? "l" : "p";
 
-      // Ở trang đầu tiên, nếu hướng giấy thực tế là nằm ngang ('l'), ta cần đổi lại cấu hình trang đầu
       if (index === 0) {
         if (pageOrientation === "l") {
-          // jsPDF không cho đổi trực tiếp orientation của trang đầu dễ dàng, cách an toàn nhất là set lại kích thước
-          // Khổ A4 tiêu chuẩn: dọc (210x297), ngang (297x210)
           pdf.internal.pageSize.setHeight(210);
           pdf.internal.pageSize.setWidth(297);
         }
       } else {
-        // Từ trang thứ 2 trở đi, thêm trang mới kèm theo hướng giấy cụ thể (giấy dọc 'p' hoặc giấy ngang 'l')
         pdf.addPage("a4", pageOrientation);
       }
 
-      // Lấy kích thước trang giấy hiện tại để vẽ ảnh khít viền
       const currentPdfWidth = pdf.internal.pageSize.getWidth();
       const currentPdfHeight = pdf.internal.pageSize.getHeight();
 
-      // Vẽ ảnh tràn viền (bắt đầu từ tọa độ 0,0 và phủ hết kích thước trang giấy hiện tại)
       pdf.addImage(imgDataObj.dataUrl, "JPEG", 0, 0, currentPdfWidth, currentPdfHeight);
     }
 
@@ -484,7 +400,7 @@ function App() {
             <div className="logo-zone">
               <span className="logo-icon">⚡</span>
               <div>
-                <h1>CHUYỂN ĐỔI ẢNH SANG PDF</h1>
+                <h1>CHỈNH SỬA VÀ CHUYỂN ĐỔI ẢNH SANG PDF</h1>
                 <p>Kéo thanh xám để xếp thứ tự trang • Click kéo chuột trên mặt ảnh để chọn cắt tự do</p>
               </div>
             </div>
@@ -532,7 +448,6 @@ function App() {
                         img={img}
                         index={index}
                         removeImage={removeImage}
-                        sharpenImage={sharpenImage}
                         resetToOriginal={resetToOriginal}
                         handleAutoCrop={handleAutoCrop}
                         rotateImageReal={rotateImageReal}
@@ -544,7 +459,7 @@ function App() {
 
               <div className="export-container">
                 <button className="export-btn" onClick={exportToPDF}>
-                  ⚡ Xuất file PDF chất lượng cao
+                  ⚡ Xuất file PDF
                 </button>
               </div>
             </div>
@@ -563,6 +478,8 @@ function App() {
             </div>
           </div>
         )}
+
+        <h1 className="designer">--- Thiết kế: Quách Công Thịnh ---</h1>
       </div>
     </>
   );
