@@ -166,6 +166,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -398,7 +399,9 @@ function App() {
       pdf.addImage(imgDataObj.dataUrl, "JPEG", 0, 0, currentPdfWidth, currentPdfHeight);
     }
 
-    pdf.save("[Converted Images].pdf");
+    // pdf.save("[Converted Images].pdf");
+    const safeFileName = pdfFileName.trim() || "Converted Images";
+    pdf.save(`${safeFileName}.pdf`);
   };
 
   return (
@@ -472,7 +475,34 @@ function App() {
                 </SortableContext>
               </DndContext>
 
+              {/* <div className="export-container">
+                <button className="export-btn" onClick={exportToPDF}>
+                  ⚡ Xuất file PDF
+                </button>
+              </div> */}
               <div className="export-container">
+                <div className="pdf-name-box">
+                  <label htmlFor="pdf-file-name">
+                    Tên file PDF
+                  </label>
+
+                  <div className="pdf-name-input-wrapper">
+                    <input
+                      id="pdf-file-name"
+                      type="text"
+                      value={pdfFileName}
+                      onChange={(e) => setPdfFileName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          exportToPDF();
+                        }
+                      }}
+                      placeholder="Nhập tên file PDF..."
+                    />
+                    <span>.pdf</span>
+                  </div>
+                </div>
+
                 <button className="export-btn" onClick={exportToPDF}>
                   ⚡ Xuất file PDF
                 </button>
@@ -493,8 +523,6 @@ function App() {
             </div>
           </div>
         )}
-
-        <h1 className="designer">--- Thiết kế: Quách Công Thịnh ---</h1>
       </div>
     </>
   );
